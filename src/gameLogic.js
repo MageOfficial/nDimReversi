@@ -1,5 +1,4 @@
 game=new Game(8,8)
-console.log(game.board)
 //game.makeMove([3,2,1,2])
 //console.log(game.board)
 board=game.board
