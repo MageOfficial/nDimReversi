@@ -129,7 +129,10 @@ export default function Game(dim, size=4) {
     }
 
     this.makeMove = function (sq){
-        console.log(sq)
+        if(!getBit(this.board[2], this.flattenIndex(sq))) {
+            console.log("already filled")
+            return false
+        }
         //Recursively send rays out and then flip everything
         function flipDir(game, dir, sq, dist=0){
             //Bounds Check
@@ -137,21 +140,15 @@ export default function Game(dim, size=4) {
                 if(sq[i]<0||sq[i]>=game.size) return false
             }
 
-            console.log(sq)
-            console.log(game.get(sq))
-
             var sqIdx = game.flattenIndex(sq)
             if(getBit(game.board[1-game.player], sqIdx) && flipDir(game, dir, sq.map((num, i)=>num+dir[i]), i++) ) {
-                console.log("here1")
                 game.set(sq, game.player)
                 return true
             }
             else if(dist>0&&getBit(game.board[game.player], sqIdx))  {
-                console.log("here2")
                 return true
             }
             else if(dist===0 &&getBit(game.board[2], sqIdx)) {
-                console.log("here3")
                 potentialMoves[1-game.player].add(sq)
             }
             return false
@@ -161,15 +158,19 @@ export default function Game(dim, size=4) {
         var res = false
         directions.forEach(dir => {
             var tempRes=flipDir(this, dir, sq.map((num, i)=>num+dir[i]));
-            console.log(tempRes)
             res||=tempRes
         });
 
-        if(res===false) throw new Error("Invalid Move");
+        if(res===false){
+            console.log("Invalid Move")
+            return false
+        };
 
         this.set(sq, this.player)
         this.player=1-this.player
         potentialMoves[this.player].delete(sq)
+        //Move Successful
+        return true
     }
 
     /*Maybe implement later

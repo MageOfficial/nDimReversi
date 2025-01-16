@@ -8,7 +8,7 @@ import Game from './gameLogic.js';
 
 function App() {
   const [modalContent, setModalContent] = useState(null);
-  const [localBoardSize, setLocalBoardSize] = useState({ dims: 4, size: 4 });
+  const [localBoardSize, setLocalBoardSize] = useState({ dims: 2, size: 4 });
 
   const handleButtonClick = (option) => {
     setModalContent(option);
@@ -199,8 +199,6 @@ function Board({game, dimCoords}) {
       return item
     })
 
-    console.log(clickSq)
-
     game.makeMove(clickSq)
 
     setBoard((prevBoard) => {
@@ -221,30 +219,31 @@ function Board({game, dimCoords}) {
   return (
     <Container className="d-flex flex-column align-items-center">
       {board.map((row, rowIndex) => (
-        <Row key={rowIndex} className="justify-content-center">
+        <Row key={rowIndex} className="justify-content-center" style={{ width: "100%" }}>
           {row.map((value, colIndex) => (
             <Col
               key={colIndex}
-              xs={1} // Size of each cell
+              xs={1} // Controls grid size in Bootstrap; can be adjusted for responsiveness
               className="border p-2"
               style={{
-                width: "75px", // Fixed width for consistency
-                height: "75px", // Fixed height for consistency
-                position: "relative", // Necessary for circle positioning
+                flex: 1, // Allow cells to flex and occupy equal space
+                maxWidth: "75px", // Minimum width for each cell
+                maxHeight: "75px", // Minimum height for each cell
+                aspectRatio: "1", // Keep cells square
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
-                backgroundColor: "grey",
                 justifyContent: "center",
+                backgroundColor: "grey",
               }}
               onClick={() => handleCellClick(rowIndex, colIndex)}
             >
-              {value!==2 && (
+              {value !== 2 && (
                 <div
                   style={{
-                    width: "60px", // Circle size
-                    height: "60px",
-                    backgroundColor:  value ? "white" : "black",
+                    width: "90%", // Circle size relative to the cell
+                    height: "90%", // Keep circle size proportional
+                    backgroundColor: value ? "white" : "black",
                     borderRadius: "50%",
                   }}
                 ></div>
@@ -254,12 +253,12 @@ function Board({game, dimCoords}) {
         </Row>
       ))}
     </Container>
-  );
+  ); 
 }
 
 function LocalPage() {
   const location = useLocation();
-  const { localBoardSize } = location.state || { localBoardSize: { dims: 4, size: 4 } };
+  const { localBoardSize } = location.state || { localBoardSize: { dims: 2, size: 4 } };
 
   var game = new Game(localBoardSize.dims, localBoardSize.size)
 
