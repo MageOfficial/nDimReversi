@@ -1,11 +1,4 @@
-game=new Game(8,8)
-//game.makeMove([3,2,1,2])
-//console.log(game.board)
-board=game.board
-
-
-
-function Game(dim, size=4) {
+export default function Game(dim, size=4) {
     this.dim = dim;
     this.size = size;
     this.player = 0;
@@ -41,11 +34,11 @@ function Game(dim, size=4) {
         new Uint8Array(Math.ceil(totalElements / 8)).fill(255)  // Empty
     ];
 
-    function flattenIndex(coords) {
+    this.flattenIndex = function(coords) {
         return coords.reduce((index, coord) => index * size + coord, 0);
     }
 
-    function unflattenIndex(index) {
+    this.unflattenIndex= function(index) {
         const coords = [];
         for (let i = 0; i < this.dim; i++) {
             coords.unshift(index % this.size);
@@ -55,7 +48,7 @@ function Game(dim, size=4) {
     }
 
     this.get = function (coords) {
-        const index = flattenIndex(coords);
+        const index = this.flattenIndex(coords);
         if (getBit(this.board[2], index)) {
             return 2;
         } 
@@ -65,7 +58,7 @@ function Game(dim, size=4) {
     };
 
     this.set = function (coords, val) {
-        const index = flattenIndex(coords);
+        const index = this.flattenIndex(coords);
         setBit(this.board[2], index, 0);
         setBit(this.board[1-val], index, 0);
         setBit(this.board[val], index, 1);
@@ -94,7 +87,7 @@ function Game(dim, size=4) {
     function getBit(array, index) {
         const byteIndex = Math.floor(index / 8);
         const bitOffset = index % 8;
-    
+        
         // Check if byteIndex is within the array bounds
         if (byteIndex >= array.length) {
             console.error(`Index ${byteIndex} is out of bounds for array of length ${array.length}`);
@@ -121,47 +114,58 @@ function Game(dim, size=4) {
 
     startPosSetup(this);
 
-    for (i=0; i<totalElements;i++){
+    for (let i=0; i<totalElements;i++){
         if(getBit(this.board[2], i)) continue
         
-        var oldSq= unflattenIndex(i)
-        var val=this.get(oldSq)
-        directions.forEach(dir => { 
-            newSq = oldSq.map((num, j)=>num+dir[j])
-            if(getBit(this.board[2], i)){
+        let oldSq= this.unflattenIndex(i)
+        let val=this.get(oldSq)
+
+        directions.forEach((dir) => { 
+            var newSq = oldSq.map((num, j)=>num+dir[j])
+            if(getBit(this.board[2], this.flattenIndex(newSq))){
                 potentialMoves[1-val].add(newSq)
             }
         })
     }
 
     this.makeMove = function (sq){
+        console.log(sq)
         //Recursively send rays out and then flip everything
         function flipDir(game, dir, sq, dist=0){
             //Bounds Check
-            for(var i=0; i<dim-1; i++){
-                if(sq[i]<0||sq[i]>=size) return false
+            for(var i=0; i<dim; i++){
+                if(sq[i]<0||sq[i]>=game.size) return false
             }
-            
-            var sqIdx = unflattenIndex(sq)
+
+            console.log(sq)
+            console.log(game.get(sq))
+
+            var sqIdx = game.flattenIndex(sq)
             if(getBit(game.board[1-game.player], sqIdx) && flipDir(game, dir, sq.map((num, i)=>num+dir[i]), i++) ) {
+                console.log("here1")
                 game.set(sq, game.player)
                 return true
             }
-            else if(getBit(game.board[game.player], sqIdx))  {
+            else if(dist>0&&getBit(game.board[game.player], sqIdx))  {
+                console.log("here2")
                 return true
             }
-            else if(dist==0 &&getBit(game.board[2], sqIdx)) {
+            else if(dist===0 &&getBit(game.board[2], sqIdx)) {
+                console.log("here3")
                 potentialMoves[1-game.player].add(sq)
             }
             return false
         }
 
         // Check all directions for valid flips
-        var res = directions.some(dir => {
-            return flipDir(this, dir, sq.map((num, i)=>num+dir[i]));
+        var res = false
+        directions.forEach(dir => {
+            var tempRes=flipDir(this, dir, sq.map((num, i)=>num+dir[i]));
+            console.log(tempRes)
+            res||=tempRes
         });
 
-        if(res==false) throw new Error("Invalid Move");
+        if(res===false) throw new Error("Invalid Move");
 
         this.set(sq, this.player)
         this.player=1-this.player
@@ -176,5 +180,4 @@ function Game(dim, size=4) {
 
    return this
 }
-
 
