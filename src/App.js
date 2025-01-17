@@ -173,100 +173,109 @@ function MainPage({
   );
 }
 
-//Should display a 2D slice of the game
-//dimCoords are the coordinates of all but two of the dimensions to define a plane
-function Board({ game, dimCoords }) {
-  const [board, setBoard] = useState([]);
-
-  useEffect(() => {
-    // Recompute the board when `dimCoords` or `game` changes
-    const newBoard = Array.from({ length: game.size }, () => Array(game.size)); // Initialize n x n board
-    for (let i = 0; i < game.size; i++) {
-      for (let j = 0; j < game.size; j++) {
-        const newCoords = dimCoords.map((item) => {
-          if (item === -1) return i;
-          if (item === -2) return j;
-          return item;
-        });
-
-        if (game.getMoves(newCoords, game.player)) {
-          newBoard[i][j] = -1;
-        } else {
-          newBoard[i][j] = game.get(newCoords);
-        }
-      }
-    }
-    setBoard(newBoard); // Update the board state
-  }, [dimCoords, game]); // Re-run this effect when dimCoords or game changes
-
-  const handleCellClick = (rowIndex, colIndex) => {
-    const clickSq = dimCoords.map((item) => {
-      if (item === -1) return rowIndex;
-      if (item === -2) return colIndex;
-      return item;
-    });
-
-    game.makeMove(clickSq);
-
-    setBoard((prevBoard) => {
-      return prevBoard.map((row, i) =>
-        row.map((cell, j) => {
-          const coords = dimCoords.map((item) => {
-            if (item === -1) return i;
-            if (item === -2) return j;
-            return item;
-          });
-
-          // Recalculate the cell value after the move
-          if (game.getMoves(coords, game.player)) {
-            return -1;
-          }
-
-          return game.get(coords);
-        })
-      );
-    });
+function MultiDimensionalBoard({ game, dimCoords }) {
+  const handleCellClick = (updatedCoords) => {
+    game.makeMove(updatedCoords);
   };
 
-  return (
-    <Container className="d-flex flex-column align-items-center">
-      {board.map((row, rowIndex) => (
-        <Row key={rowIndex} className="justify-content-center" style={{ width: '100%' }}>
-          {row.map((value, colIndex) => (
-            <Col
-              key={colIndex}
-              xs={1}
-              className="border p-2"
+  const renderBoard = (currentDimCoords, depth = 0) => {
+    const undefinedIndices = currentDimCoords
+      .map((item, index) => (item === undefined ? index : null))
+      .filter((index) => index !== null);
+
+    if (undefinedIndices.length === 2) {
+      const [rowDim, colDim] = undefinedIndices;
+
+      return (
+        <Container fluid>
+          {Array.from({ length: game.size }).map((_, rowIndex) => (
+            <Row
+              key={rowIndex}
+              className="justify-content-center"
               style={{
-                flex: 1,
-                maxWidth: '75px',
-                maxHeight: '75px',
-                aspectRatio: '1',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: 'grey',
+                display: "flex"
               }}
-              onClick={() => handleCellClick(rowIndex, colIndex)}
             >
-              {value !== 2 && (
-                <div
-                  style={{
-                    width: value === -1 ? '30%' : '90%',
-                    height: value === -1 ? '30%' : '90%',
-                    backgroundColor: value === 1 ? 'white' : value === 0 ? 'black' : '#404040',
-                    borderRadius: '50%',
-                  }}
-                ></div>
-              )}
-            </Col>
+              {Array.from({ length: game.size }).map((_, colIndex) => {
+                const updatedCoords = [...currentDimCoords];
+                updatedCoords[rowDim] = rowIndex;
+                updatedCoords[colDim] = colIndex;
+
+                const cellValue = game.get(updatedCoords);
+
+                return (
+                  <Col
+                    key={colIndex}
+                    xs={2} // Control the width of the column
+                    className="border p-1"
+                    style={{
+                      maxWidth: "50px", // Adjust the size of the cell
+                      aspectRatio: "1", // Keep the cells square
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: "grey",
+                    }}
+                    onClick={() => handleCellClick(updatedCoords)}
+                  >
+                    {cellValue !== 2 && (
+                      <div
+                        style={{
+                          width: cellValue === -1 ? "30%" : "90%",
+                          height: cellValue === -1 ? "30%" : "90%",
+                          backgroundColor:
+                            cellValue === 1 ? "white" : cellValue === 0 ? "black" : "#404040",
+                          borderRadius: "50%",
+                        }}
+                      ></div>
+                    )}
+                  </Col>
+                );
+              })}
+            </Row>
           ))}
+        </Container>
+      );
+    }
+
+    const nextUndefinedDim = undefinedIndices[0];
+    const isRowLayout = depth % 2 === 0;
+
+    return (
+      <Container fluid>
+        <Row
+          className={isRowLayout ? "flex-row" : "flex-column"}
+          style={{
+            gap: "10px", // Equal spacing between rows and columns
+            width: "100%", // Ensure full width
+          }}
+        >
+          {Array.from({ length: game.size }).map((_, index) => {
+            const updatedCoords = [...currentDimCoords];
+            updatedCoords[nextUndefinedDim] = index;
+
+            return (
+              <Col
+                key={index}
+                style={{
+                  gap:"10px",
+                  padding: "5px",
+                  flex: 1, // Allow flexible resizing
+                }}
+              >
+                {renderBoard(updatedCoords, depth + 1)}
+              </Col>
+            );
+          })}
         </Row>
-      ))}
-    </Container>
-  );
+      </Container>
+    );
+  };
+
+  return renderBoard(dimCoords);
 }
+
 
 function LocalPage() {
   const location = useLocation();
@@ -277,32 +286,34 @@ function LocalPage() {
 
   // List of numbers to be displayed (limited by `localBoardSize.dims`)
   const numbers = Array.from({ length: localBoardSize.dims }, (_, index) => index + 1);
-  const [activeInputs, setActiveInputs] = useState({}); // Keeps track of which numbers have inputs
-
+  const [activeInputs, setActiveInputs] = useState(
+    Array(localBoardSize.dims).fill(undefined)
+  );
+  
   // Handle number click to toggle between showing and removing the input
   const handleNumberClick = (num) => {
     setActiveInputs((prevInputs) => {
+      // Create a new copy of the array
+      const newInputs = [...prevInputs];
       // Toggle input field for the clicked number
-      const newInputs = { ...prevInputs };
-      if (newInputs[num] !== undefined) {
-        // If input exists, remove it (set to undefined)
-        delete newInputs[num];
-      } else {
-        // Otherwise, show input field with initial value as an empty string
-        newInputs[num] = '';
-      }
+      newInputs[num] = newInputs[num] === undefined ? '' : undefined;
       return newInputs;
     });
   };
-
+  
   // Handle input change (only accept positive integers between 1 and localBoardSize.size)
-  const handleInputChange = (num, value) => { 
+  const handleInputChange = (num, value) => {
     // Ensure the value is a positive integer and within the allowed range
     const positiveInteger = parseInt(value, 10);
-    if (positiveInteger > 0 && positiveInteger <= localBoardSize.size && Number.isInteger(positiveInteger)) {
-      setActiveInputs((prevInputs) => ({ ...prevInputs, [num]: positiveInteger }));
+    if (positiveInteger >= 0 && positiveInteger < localBoardSize.size) {
+      setActiveInputs((prevInputs) => {
+        const newInputs = [...prevInputs];
+        newInputs[num] = positiveInteger; // Update the specific input value
+        return newInputs;
+      });
     }
   };
+  
 
   return (
     <div style={{ display: 'flex' }}>
@@ -330,9 +341,9 @@ function LocalPage() {
           <div key={num} className="d-flex align-items-center mb-2">
             <Button
               variant="secondary"
-              onClick={() => handleNumberClick(num)}
+              onClick={() => handleNumberClick(num-1)}
               style={{
-                backgroundColor: activeInputs[num] ?  '#C0C0C0' : 'gray',
+                backgroundColor: activeInputs[num-1] ?  '#C0C0C0' : 'gray',
                 color: 'white',
                 marginRight: '10px',
                 width: '50px', // Fixed width for button
@@ -342,13 +353,13 @@ function LocalPage() {
             </Button>
             
             {/* If the number is clicked, show an input box next to it */}
-            {activeInputs[num] !== undefined && (
+            {activeInputs[num-1] !== undefined && (
               <Form.Control
                 type="number"
-                value={activeInputs[num]}
-                onChange={(e) => handleInputChange(num, e.target.value)}
+                value={activeInputs[num-1]}
+                onChange={(e) => handleInputChange(num-1, e.target.value)}
                 placeholder="Distance"
-                min="1"
+                min="0"
                 max={localBoardSize.size}
                 style={{ width: '100px' }}
               />
@@ -362,10 +373,11 @@ function LocalPage() {
         <header className="App-header">
           <h1>Game</h1>
           <p>Dimensions: {localBoardSize.dims} & Size: {localBoardSize.size}</p>
-          <Board game={game} dimCoords={[-1,-2]} />
+          <MultiDimensionalBoard game={game} dimCoords={activeInputs} />
         </header>
       </div>
     </div>
   );
 }
+
 export default App;
