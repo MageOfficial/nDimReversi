@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "./App.css";
 import { Button, Form, Container, Row, Col } from "react-bootstrap";
 import { BrowserRouter as Router, Route, Routes, Link, useNavigate, useLocation } from "react-router-dom";
@@ -175,76 +175,88 @@ function MainPage({
 
 //Should display a 2D slice of the game
 //dimCoords are the coordinates of all but two of the dimensions to define a plane
-function Board({game, dimCoords}) {
-  const [board, setBoard] = useState(()=>{
-      var newBoard = Array.from({ length: game.size }, () => Array(game.size)) // Initialize n x n board with "false" for unclicked
-      for(let i=0; i<game.size; i++){
-        for(let j=0; j<game.size; j++){
-          newBoard[i][j]=game.get(dimCoords.map(item => {
-            if(item===-1) return i
-            if(item===-2) return j
-            return item
-          }))
+function Board({ game, dimCoords }) {
+  const [board, setBoard] = useState([]);
+
+  useEffect(() => {
+    // Recompute the board when `dimCoords` or `game` changes
+    const newBoard = Array.from({ length: game.size }, () => Array(game.size)); // Initialize n x n board
+    for (let i = 0; i < game.size; i++) {
+      for (let j = 0; j < game.size; j++) {
+        const newCoords = dimCoords.map((item) => {
+          if (item === -1) return i;
+          if (item === -2) return j;
+          return item;
+        });
+
+        if (game.getMoves(newCoords, game.player)) {
+          newBoard[i][j] = -1;
+        } else {
+          newBoard[i][j] = game.get(newCoords);
         }
       }
-      return newBoard
     }
-  );
+    setBoard(newBoard); // Update the board state
+  }, [dimCoords, game]); // Re-run this effect when dimCoords or game changes
 
   const handleCellClick = (rowIndex, colIndex) => {
-    //This line is called once
-    var clickSq = dimCoords.map(item => {
-      if(item===-1) return rowIndex
-      if(item===-2) return colIndex
-      return item
-    })
+    const clickSq = dimCoords.map((item) => {
+      if (item === -1) return rowIndex;
+      if (item === -2) return colIndex;
+      return item;
+    });
 
-    game.makeMove(clickSq)
+    game.makeMove(clickSq);
 
     setBoard((prevBoard) => {
-      const newBoard = prevBoard.map((row, i) =>
+      return prevBoard.map((row, i) =>
         row.map((cell, j) => {
           const coords = dimCoords.map((item) => {
             if (item === -1) return i;
             if (item === -2) return j;
             return item;
           });
+
+          // Recalculate the cell value after the move
+          if (game.getMoves(coords, game.player)) {
+            return -1;
+          }
+
           return game.get(coords);
         })
       );
-      return newBoard; // Return a new state object
     });
   };
 
   return (
     <Container className="d-flex flex-column align-items-center">
       {board.map((row, rowIndex) => (
-        <Row key={rowIndex} className="justify-content-center" style={{ width: "100%" }}>
+        <Row key={rowIndex} className="justify-content-center" style={{ width: '100%' }}>
           {row.map((value, colIndex) => (
             <Col
               key={colIndex}
-              xs={1} // Controls grid size in Bootstrap; can be adjusted for responsiveness
+              xs={1}
               className="border p-2"
               style={{
-                flex: 1, // Allow cells to flex and occupy equal space
-                maxWidth: "75px", // Minimum width for each cell
-                maxHeight: "75px", // Minimum height for each cell
-                aspectRatio: "1", // Keep cells square
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: "grey",
+                flex: 1,
+                maxWidth: '75px',
+                maxHeight: '75px',
+                aspectRatio: '1',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'grey',
               }}
               onClick={() => handleCellClick(rowIndex, colIndex)}
             >
               {value !== 2 && (
                 <div
                   style={{
-                    width: "90%", // Circle size relative to the cell
-                    height: "90%", // Keep circle size proportional
-                    backgroundColor: value ? "white" : "black",
-                    borderRadius: "50%",
+                    width: value === -1 ? '30%' : '90%',
+                    height: value === -1 ? '30%' : '90%',
+                    backgroundColor: value === 1 ? 'white' : value === 0 ? 'black' : '#404040',
+                    borderRadius: '50%',
                   }}
                 ></div>
               )}
@@ -253,29 +265,107 @@ function Board({game, dimCoords}) {
         </Row>
       ))}
     </Container>
-  ); 
+  );
 }
 
 function LocalPage() {
   const location = useLocation();
   const { localBoardSize } = location.state || { localBoardSize: { dims: 2, size: 4 } };
+  
+  // Initialize the game
+  const game = new Game(localBoardSize.dims, localBoardSize.size);
 
-  var game = new Game(localBoardSize.dims, localBoardSize.size)
+  // List of numbers to be displayed (limited by `localBoardSize.dims`)
+  const numbers = Array.from({ length: localBoardSize.dims }, (_, index) => index + 1);
+  const [activeInputs, setActiveInputs] = useState({}); // Keeps track of which numbers have inputs
+
+  // Handle number click to toggle between showing and removing the input
+  const handleNumberClick = (num) => {
+    setActiveInputs((prevInputs) => {
+      // Toggle input field for the clicked number
+      const newInputs = { ...prevInputs };
+      if (newInputs[num] !== undefined) {
+        // If input exists, remove it (set to undefined)
+        delete newInputs[num];
+      } else {
+        // Otherwise, show input field with initial value as an empty string
+        newInputs[num] = '';
+      }
+      return newInputs;
+    });
+  };
+
+  // Handle input change (only accept positive integers between 1 and localBoardSize.size)
+  const handleInputChange = (num, value) => { 
+    // Ensure the value is a positive integer and within the allowed range
+    const positiveInteger = parseInt(value, 10);
+    if (positiveInteger > 0 && positiveInteger <= localBoardSize.size && Number.isInteger(positiveInteger)) {
+      setActiveInputs((prevInputs) => ({ ...prevInputs, [num]: positiveInteger }));
+    }
+  };
 
   return (
-    <div>
-      <div className="position-absolute top-0 start-0 m-3">
-        <Link to="/">
-          <Button variant="secondary">Home</Button>
-        </Link>
+    <div style={{ display: 'flex' }}>
+      {/* List of numbers on the left */}
+      <div
+        style={{
+          width: '200px', // Fixed width for the number list box
+          padding: '10px',
+          border: '1px solid #ccc',
+          height: '100vh',
+          overflowY: 'auto',
+        }}
+      >
+        <div className="mb-4">
+          {/* Link to go back to the Home page */}
+          <Link to="/">
+            <Button variant="secondary">Home</Button>
+          </Link>
+        </div>
+
+        <h2>Dimensions</h2>
+        {numbers.map((num) => (
+
+          
+          <div key={num} className="d-flex align-items-center mb-2">
+            <Button
+              variant="secondary"
+              onClick={() => handleNumberClick(num)}
+              style={{
+                backgroundColor: activeInputs[num] ?  '#C0C0C0' : 'gray',
+                color: 'white',
+                marginRight: '10px',
+                width: '50px', // Fixed width for button
+              }}
+            >
+              {num}
+            </Button>
+            
+            {/* If the number is clicked, show an input box next to it */}
+            {activeInputs[num] !== undefined && (
+              <Form.Control
+                type="number"
+                value={activeInputs[num]}
+                onChange={(e) => handleInputChange(num, e.target.value)}
+                placeholder="Distance"
+                min="1"
+                max={localBoardSize.size}
+                style={{ width: '100px' }}
+              />
+            )}
+          </div>
+        ))}
       </div>
-      <header className="App-header">
-        <h1>Game</h1>
-        <p>Dimensions: {localBoardSize.dims} & Size: {localBoardSize.size}</p>
-        <Board game={game} dimCoords={[-1,-2]} />
-      </header>
+
+      {/* Main Game Area on the right */}
+      <div style={{ flexGrow: 1 }}>
+        <header className="App-header">
+          <h1>Game</h1>
+          <p>Dimensions: {localBoardSize.dims} & Size: {localBoardSize.size}</p>
+          <Board game={game} dimCoords={[-1,-2]} />
+        </header>
+      </div>
     </div>
   );
 }
-
 export default App;

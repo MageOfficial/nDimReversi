@@ -2,7 +2,7 @@ export default function Game(dim, size=4) {
     this.dim = dim;
     this.size = size;
     this.player = 0;
-    var potentialMoves = [new Set(),new Set()]
+    
 
     if (size <= 2 || size % 2 !== 0) {
         throw new Error('Size must be defined, even and, greater than 2');
@@ -34,6 +34,11 @@ export default function Game(dim, size=4) {
         new Uint8Array(Math.ceil(totalElements / 8)).fill(255)  // Empty
     ];
 
+    this.potentialMoves = [
+        new Uint8Array(Math.ceil(totalElements / 8)),
+        new Uint8Array(Math.ceil(totalElements / 8))
+    ]
+
     this.flattenIndex = function(coords) {
         return coords.reduce((index, coord) => index * size + coord, 0);
     }
@@ -55,6 +60,11 @@ export default function Game(dim, size=4) {
         else{
             return 1-getBit(this.board[0], index)
         }
+    };
+
+    this.getMoves = function (coords, player) {
+        const index = this.flattenIndex(coords);
+        return getBit(this.potentialMoves[player], index)
     };
 
     this.set = function (coords, val) {
@@ -121,9 +131,9 @@ export default function Game(dim, size=4) {
         let val=this.get(oldSq)
 
         directions.forEach((dir) => { 
-            var newSq = oldSq.map((num, j)=>num+dir[j])
-            if(getBit(this.board[2], this.flattenIndex(newSq))){
-                potentialMoves[1-val].add(newSq)
+            var newIdx=this.flattenIndex(oldSq.map((num, j)=>num+dir[j]))
+            if(getBit(this.board[2], newIdx)){
+                setBit(this.potentialMoves[1-val], newIdx, 1)
             }
         })
     }
@@ -149,7 +159,7 @@ export default function Game(dim, size=4) {
                 return true
             }
             else if(dist===0 &&getBit(game.board[2], sqIdx)) {
-                potentialMoves[1-game.player].add(sq)
+                setBit(game.potentialMoves[1-game.player], sqIdx, 1)
             }
             return false
         }
@@ -165,10 +175,16 @@ export default function Game(dim, size=4) {
             console.log("Invalid Move")
             return false
         };
+        
+        var sqIdx=this.flattenIndex(sq)
+        
+        setBit(this.board[this.player], sqIdx, 1) //Set Piece
+        setBit(this.board[2], sqIdx, 0) //Set empty to filled
 
-        this.set(sq, this.player)
+        setBit(this.potentialMoves[1-this.player], sqIdx, 0) //Remove potential move
+        setBit(this.potentialMoves[this.player], sqIdx, 0)
+
         this.player=1-this.player
-        potentialMoves[this.player].delete(sq)
         //Move Successful
         return true
     }
