@@ -159,6 +159,7 @@ export default function Game(dim, size=4) {
                 return true
             }
             else if(dist===0 &&getBit(game.board[2], sqIdx)) {
+                //TODO: Invalid move will set this
                 setBit(game.potentialMoves[1-game.player], sqIdx, 1)
             }
             return false
