@@ -2,7 +2,6 @@ export default function Game(dim, size=4) {
     this.dim = dim;
     this.size = size;
     this.player = 0;
-    
 
     if (size <= 2 || size % 2 !== 0) {
         throw new Error('Size must be defined, even and, greater than 2');
@@ -138,6 +137,10 @@ export default function Game(dim, size=4) {
         })
     }
 
+    this.pass = function (){
+        this.player=1-this.player
+    }
+
     this.makeMove = function (sq){
         if(!getBit(this.board[2], this.flattenIndex(sq))) {
             console.log("already filled")
@@ -190,7 +193,7 @@ export default function Game(dim, size=4) {
         return true
     }
 
-    /*Maybe implement later
+    /*Maybe implement later to generate moves lazily for only the viewable portion of the game
     this.generateMoves = function(){
     
     }

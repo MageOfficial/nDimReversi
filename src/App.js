@@ -1,17 +1,18 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import "./App.css";
-import { Button, Form, Container, Row, Col, ListGroup } from "react-bootstrap";
-import { BrowserRouter as Router, Route, Routes, Link, useNavigate, useLocation } from "react-router-dom";
+import { Button, Form, Container, Row, Col, ButtonGroup } from "react-bootstrap";
+import { BrowserRouter as Router, Route, Routes, Link, useNavigate, useLocation} from "react-router-dom";
 import Modal from "react-bootstrap/Modal";
 import "bootstrap/dist/css/bootstrap.css";
 import Game from './gameLogic.js';
+import socket from "./socket";
 
 function App() {
-  const [modalContent, setModalContent] = useState(null); 
+  const [modalContent, setModalContent] = useState(null);
   const [settings, setSettings] = useState({
-    localBoardSize: { dims: 2, size: 4 },
+    boardSize: { dims: 2, size: 4 },
     aiDepth: 3,
-    playAsBlack: true,
+    color: "Black",
   });
 
   const handleButtonClick = (option) => {
@@ -23,10 +24,22 @@ function App() {
   };
 
   const updateSetting = (key, value) => {
-    setSettings((prevSettings) => ({
-      ...prevSettings,
-      [key]: typeof value === "function" ? value(prevSettings[key]) : value,
-    }));
+    setSettings((prevSettings) => {
+      if (key === "boardSize") {
+        return {
+          ...prevSettings,
+          boardSize: {
+            ...prevSettings.boardSize,
+            ...value,
+          },
+        };
+      } else {
+        return {
+          ...prevSettings,
+          [key]: typeof value === "function" ? value(prevSettings[key]) : value,
+        };
+      }
+    });
   };
 
   return (
@@ -46,6 +59,7 @@ function App() {
         />
         <Route path="/local" element={<GamePage />} />
         <Route path="/online" element={<OnlinePage />} />
+        <Route path="/online/game" element={<GamePage />} />
         <Route path="/ai" element={<GamePage />} />
       </Routes>
     </Router>
@@ -59,20 +73,25 @@ function MainPage({
   settings,
   updateSetting,
 }) {
-
   const [strInput, setStrInput] = useState("");
   const navigate = useNavigate();
 
   const handleCreateClick = () => {
     if (modalContent === "Local") {
-      navigate("/local", { state: { localBoardSize: settings.localBoardSize } });
+      navigate("/local", { state: { boardSize: settings.boardSize } });
     } else if (modalContent === "AI") {
+      var newColor=settings.color;
+      if(settings.color === "Random"){ 
+        newColor=Math.random() > 0.5 ? 0 : 1
+      }
+      else{
+        newColor=Number(settings.color!=="Black")
+      }
       navigate("/ai", {
         state: {
-          localBoardSize: settings.localBoardSize,
-          aiDepth: settings.aiDepth,
-          playAsBlack: settings.playAsBlack,
-        },
+          boardSize: settings.boardSize,
+          aiSettings: {depth: settings.aiDepth, player: newColor}
+        }
       });
     }
     closeModal();
@@ -123,27 +142,25 @@ function MainPage({
                     <Button
                       variant="secondary"
                       onClick={() =>
-                        updateSetting("localBoardSize", (prev) => ({
-                          ...prev,
-                          dims: Math.max(0, prev.dims - 1),
-                        }))
+                        updateSetting("boardSize", {
+                          dims: Math.max(0, settings.boardSize.dims - 1),
+                        })
                       }
                     >
                       -
                     </Button>
                     <Form.Control
                       type="number"
-                      value={settings.localBoardSize.dims}
+                      value={settings.boardSize.dims}
                       readOnly
                       className="mx-2"
                     />
                     <Button
                       variant="secondary"
                       onClick={() =>
-                        updateSetting("localBoardSize", (prev) => ({
-                          ...prev,
-                          dims: prev.dims + 1,
-                        }))
+                        updateSetting("boardSize", {
+                          dims: settings.boardSize.dims + 1,
+                        })
                       }
                     >
                       +
@@ -156,27 +173,25 @@ function MainPage({
                     <Button
                       variant="secondary"
                       onClick={() =>
-                        updateSetting("localBoardSize", (prev) => ({
-                          ...prev,
-                          size: Math.max(2, prev.size - 2),
-                        }))
+                        updateSetting("boardSize", {
+                          size: Math.max(2, settings.boardSize.size - 2),
+                        })
                       }
                     >
                       -
                     </Button>
                     <Form.Control
                       type="number"
-                      value={settings.localBoardSize.size}
+                      value={settings.boardSize.size}
                       readOnly
                       className="mx-2"
                     />
                     <Button
                       variant="secondary"
                       onClick={() =>
-                        updateSetting("localBoardSize", (prev) => ({
-                          ...prev,
-                          size: prev.size + 2,
-                        }))
+                        updateSetting("boardSize", {
+                          size: settings.boardSize.size + 2,
+                        })
                       }
                     >
                       +
@@ -193,78 +208,83 @@ function MainPage({
                     step={1}
                     value={settings.aiDepth}
                     onChange={(e) =>
-                      updateSetting("aiDepth", Number(e.target.value))
+                      updateSetting("aiDepth", () => Number(e.target.value))
                     }
                   />
                   <div className="text-center">
                     <small>Current Depth: {settings.aiDepth}</small>
                   </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginTop: "10px"
-                      }}
-                    >
-                      <Form.Check
-                        type="checkbox"
-                        id="playAsBlackCheckbox"
-                        label="Play as Black"
-                        className="custom-checkbox"
-                        checked={settings.playAsBlack}
-                        onChange={(e) => updateSetting("playAsBlack", e.target.checked)}
-                      />
-                    </div>
+
+                  {/* Color Selection Buttons */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginTop: "10px",
+                    }}
+                  >
+                    <p className="me-3 mb-0">Select Color:</p>
+                    <ButtonGroup>
+                      {["Black", "Random", "White"].map((color) => (
+                        <Button
+                          key={color}
+                          variant={
+                            settings.color === color ? "primary" : "outline-primary"
+                          }
+                          onClick={() => updateSetting("color", color)}
+                        >
+                          {color}
+                        </Button>
+                      ))}
+                    </ButtonGroup>
+                  </div>
                 </>
               )}
             </>
           )}
-            {modalContent == "Online" && (
-              <Form className="d-flex flex-column align-items-center">
-                {/* String Input Field */}
-                <Form.Group controlId="stringInput" className="mb-3">
-                  <Form.Label>Enter Username:</Form.Label>
-                  <Form.Control
-                    type="text"
-                    placeholder="Bob"
-                    className="text-center"
-                    value={strInput} // Bind input value to state
-                    onChange={(e) => setStrInput(e.target.value)} // Update state on change
-                  />
-                </Form.Group>
-
-                {/* Submit Button */}
-                <Button
-                  variant="primary"
-                  type="button"
-                  onClick={() => navigate("/online", { state: { name: strInput } })} // Pass strInput as state
-                >
-                  Enter
-                </Button>
-              </Form>
-            )}
+          {modalContent === "Online" && (
+            <Form className="d-flex flex-column align-items-center">
+              <Form.Group controlId="stringInput" className="mb-3">
+                <Form.Label>Enter Username:</Form.Label>
+                <Form.Control
+                  type="text"
+                  placeholder="Bob"
+                  className="text-center"
+                  value={strInput}
+                  onChange={(e) => setStrInput(e.target.value)}
+                />
+              </Form.Group>
+              <Button
+                variant="primary"
+                type="button"
+                onClick={() =>
+                  navigate("/online", { state: { username: strInput } })
+                }
+              >
+                Enter
+              </Button>
+            </Form>
+          )}
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={closeModal}>
             Close
           </Button>
-          <Button variant="primary" onClick={handleCreateClick}>
-            Create
-          </Button>
+          {(modalContent === "Local" || modalContent === "AI") && (
+            <Button variant="primary" onClick={handleCreateClick}>
+              Create
+            </Button>
+          )}
         </Modal.Footer>
       </Modal>
     </div>
   );
 }
 
-function MultiDimensionalBoard({ game, dimCoords }) {
-  const [_, rerender] = useState(false);
+function MultiDimensionalBoard({ game, is2P, dimCoords, onCellClick, player}) {
 
-  const handleCellClick = (updatedCoords) => {
-    game.makeMove(updatedCoords);
-    rerender(prev => !prev);
-  };
+  var moveAble=!is2P||game.player===player
 
   const renderBoard = (currentDimCoords, depth = 0) => {
     const undefinedIndices = currentDimCoords
@@ -296,24 +316,28 @@ function MultiDimensionalBoard({ game, dimCoords }) {
 
                 var cellValue = game.get(updatedCoords);
 
-                if(cellValue===2&&game.getMoves(updatedCoords, game.player))
+                if(
+                  cellValue===2 //Check if square is empty
+                  &&(moveAble) //Check to see if it is the current players turn or if there is no turns
+                  &&game.getMoves(updatedCoords, game.player)) //Check to see if its possible to move to this square
                   cellValue=-1
 
                 return (
+                  //Individual cell
                   <Col
                     key={colIndex}
                     xs={2} // Control the width of the column
                     className="border p-1"
                     style={{
-                      maxWidth: "50px", // Adjust the size of the cell
-                      aspectRatio: "1", // Keep the cells square
+                      maxWidth: "50px",
+                      aspectRatio: "1", 
                       cursor: "pointer",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       backgroundColor: "grey",
                     }}
-                    onClick={() => handleCellClick(updatedCoords)}
+                    onClick={() => {if(moveAble) onCellClick(updatedCoords)}}
                   >
                     {cellValue !== 2 && (
                       <div
@@ -408,20 +432,55 @@ function GamePage() {
   const location = useLocation();
   const defaultBoardSize = { dims: 2, size: 4 };
 
-  const { localBoardSize = defaultBoardSize, localAIDepth, username } = location.state || {};
-  const isAIGame = localAIDepth !== undefined;
-  const isMultiplayer = username !== undefined;
-  
+  const {
+    boardSize = defaultBoardSize,
+    aiSettings,
+    mpSettings,
+    username,
+  } = location.state || {};
+
+  const isAI = aiSettings !== undefined;
+  const isMP = mpSettings !== undefined;
+  const is2P = isAI || isMP;
+
+  const player = isAI ? aiSettings.player : isMP ? (Number(mpSettings.users[mpSettings.startPlayer]===username)) : undefined;
+
   // Initialize the game
-  const game = new Game(localBoardSize.dims, localBoardSize.size);
+  const gameRef = useRef(new Game(boardSize.dims, boardSize.size));
 
-  // List of numbers to be displayed up to localBoardSize.dims
-  const numbers = Array.from({ length: localBoardSize.dims }, (_, index) => index + 1);
+  const [turn, setTurn] = useState(false); 
+
+  const handleTurnChange = () => {
+    setTurn((prevTurn) => !prevTurn);
+  }
+
+  const handleCellClick = (coords) => {
+    var success=gameRef.current.makeMove(coords);
+    if(success){
+      if(isMP){
+        socket.emit("move", coords)
+      }
+      handleTurnChange();
+    }
+  };
+
+  if(isMP){
+    socket.on("move", function (msg) {
+      if(msg==="pass"){
+        gameRef.current.pass()
+      }
+      else{
+        gameRef.current.makeMove(msg);
+      }
+      handleTurnChange();
+    });
+  }
+
+  // List of numbers to be displayed up to boardSize.dims
+  const numbers = Array.from({ length: boardSize.dims }, (_, index) => index + 1);
   const [activeInputs, setActiveInputs] = useState(
-    Array(localBoardSize.dims).fill(undefined)
+    Array(boardSize.dims).fill(undefined)
   );
-
-  const [player, turnChange] = useState(game.player);  // Use game state
   
   const handleNumberClick = (num) => {
     setActiveInputs((prevInputs) => {
@@ -436,7 +495,7 @@ function GamePage() {
   const handleInputChange = (num, value) => {
     // Value is a positive integer from 0 to size
     const positiveInteger = parseInt(value, 10);
-    if (positiveInteger >= 0 && positiveInteger < localBoardSize.size) {
+    if (positiveInteger >= 0 && positiveInteger < boardSize.size) {
       setActiveInputs((prevInputs) => {
         const newInputs = [...prevInputs];
         newInputs[num] = positiveInteger;
@@ -488,7 +547,7 @@ function GamePage() {
                 onChange={(e) => handleInputChange(num-1, e.target.value)}
                 placeholder="Distance"
                 min="0"
-                max={localBoardSize.size}
+                max={boardSize.size}
                 style={{ width: '100px' }}
               />
             )}
@@ -498,10 +557,11 @@ function GamePage() {
 
       {/* Main Game Area */}
       <div style={{ flexGrow: 1 }}>
-        <header className="App-header">
+      <header className="App-header">
           <h1>Game</h1>
-          <p>Dimensions: {localBoardSize.dims} & Size: {localBoardSize.size}</p>
-              {/* Display Current Turn */}
+          <p>Dimensions: {boardSize.dims} & Size: {boardSize.size}</p>
+          
+          {/* Display Current Turn */}
           <div
             style={{
               marginBottom: "20px", // Add some spacing
@@ -510,25 +570,53 @@ function GamePage() {
               alignItems: "center", // Align the circle vertically
             }}
           >
+            {/* Current Turn Circle */}
             <div
-              style={
-                {
+              style={{
                 width: "50px",
                 height: "50px",
                 borderRadius: "50%",
-                backgroundColor: player ? "white" : "black", // Change the color based on the current player's turn
+                backgroundColor: turn ? "white" : "black", // Change the color based on the current player's turn
                 display: "flex",
                 justifyContent: "center", // Center the text inside the circle
                 alignItems: "center", // Center the text vertically
-                color: player ? "black" : "white", // Set text color to contrast the circle color
+                color: turn ? "black" : "white", // Set text color to contrast the circle color
                 fontWeight: "bold", // Optional: to make the text stand out
                 fontSize: "18px", // Optional: adjust the font size
               }}
             >
               Turn
             </div>
+
+            {/* Pass Button */}
+            <Button 
+              onClick={() => {
+                if(!is2P||gameRef.current.player===player){
+                  gameRef.current.pass()
+                  handleTurnChange();
+                  if(isMP){
+                    socket.emit("move", "pass")
+                  }
+                }
+              }}
+              style={{
+                marginLeft: "20px",
+                backgroundColor: "#202020",
+                fontSize: "16px",
+              }}
+            >
+              Pass
+            </Button>
           </div>
-          <MultiDimensionalBoard game={game} dimCoords={activeInputs} />
+
+          {/* Render the Board */}
+          <MultiDimensionalBoard
+            game={gameRef.current}
+            is2P={is2P}
+            dimCoords={activeInputs}
+            onCellClick={handleCellClick}
+            player={player}
+          />
         </header>
       </div>
     </div>
@@ -536,74 +624,126 @@ function GamePage() {
 }
 
 function OnlinePage() {
-
   const location = useLocation();
-  const username=location.state || {username:"Guest"};
-
-  var socket = io();
-  socket.emit('login', username);
-
-  socket.on('login', function (msg) {
-    myGames = msg.games;
-    updateGamesList();
-  });
-
-  socket.on('update', function (msg) {//Updates games whenever one is created
-    usersOnline = msg.users;
-    //updateUserList();
-    myGames = msg.games;
-    updateGamesList();
-  });
+  const navigate = useNavigate();
+  const username = useMemo(() => location.state?.username || "Guest", [location.state]);
 
   const [showModal, setShowModal] = useState(false);
   const [settings, setSettings] = useState({
-    localBoardSize: { dims: 2, size: 4 },
-    playAsBlack: true,
+    boardSize: { dims: 2, size: 4 },
+    color: "Random",
   });
 
-  const handleModalClose = () => setShowModal(false);
-  const handleModalShow = () => setShowModal(true);
+  const [gamesList, setGamesList] = useState({});
+
+  console.log(gamesList)
+
+  useEffect(() => {
+    console.log("here")
+    console.log(username)
+    socket.emit("login", username);
+  }, [username, navigate]);
+
+  socket.on("update", function (msg) {
+    console.log("here")
+    console.log(msg.games)
+    setGamesList(msg.games);
+  });
+
+  socket.on("matched", function (msg) {
+    console.log("matched")
+    console.log(msg)
+    navigate('/online/game', { state: {boardSize: msg.boardSize, mpSettings:msg.mpSettings, username:username} });
+  });
 
   const updateSetting = (key, updater) => {
     setSettings((prev) => ({
       ...prev,
-      [key]: updater(prev[key]),
+      boardSize: {
+        ...prev.boardSize,
+        [key]: updater(prev.boardSize[key]),
+      },
     }));
   };
 
-  const navigate = useNavigate();
-
-  const handleCreateClick = () => {
-    socket.emit('newlobby', settings);
-    //set some content saying waiting for game
-    closeModal();
+  const handleColorChange = (color) => {
+    setSettings((prev) => ({ ...prev, color }));
   };
 
-  socket.on('matched', function (msg) {
-    //navigate to game-page
-    navigate()
-  });
+  const handleCreateClick = () => {
+    socket.emit("newgame", settings);
+    setShowModal(false);
+  };
 
   return (
     <div className="App">
       <header className="App-header">
-        <div className="d-flex flex-column align-items-center justify-content-start" style={{ height: "100vh", padding: "1rem" }}>
+        <div
+          className="d-flex flex-column align-items-center justify-content-start"
+          style={{ height: "100vh", padding: "1rem", width: '90%' }} 
+        >
           <h1 className="mb-4">Online</h1>
-          <Button variant="primary" size="lg" onClick={handleModalShow}  style={{
-            fontSize: "16px",
-            padding: "10px 20px",
-          }}>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => setShowModal(true)}
+            style={{
+              fontSize: "16px",
+              padding: "10px 20px",
+            }}
+          >
             Create Room
           </Button>
+          {/* Games List */}
+          <div className="mt-4 w-100">
+            <h3>Available Games</h3>
+            <ul className="list-group">
+              {/* Column headers */}
+              <li className="list-group-item d-flex justify-content-between align-items-center font-weight-bold">
+                <div className="col-2">Player</div>
+                <div className="col-2">Dimensions</div>
+                <div className="col-2">Size</div>
+                <div className="col-2">Color</div>
+                <div className="col-1"></div>
+              </li>
+
+              {Object.keys(gamesList).length > 0 ? (
+                Object.entries(gamesList).map(([gameId, game]) => (
+                  <li
+                    key={gameId}
+                    className="list-group-item d-flex justify-content-between align-items-center"
+                  >
+                    <div className="col-2">{game.users[0]}</div>
+                    <div className="col-2">{game.settings.boardSize.dims}</div>
+                    <div className="col-2">{game.settings.boardSize.size}</div>
+                    <div className="col-2">{game.settings.color}</div>
+                    <div className="col-1">
+                      <Button
+                        variant="success"
+                        size="sm"
+                        onClick={() => socket.emit("join", gameId)}
+                      >
+                        Join
+                      </Button>
+                    </div>
+                  </li>
+                ))
+              ) : (
+                <li className="list-group-item">No games available</li>
+              )}
+            </ul>
+          </div>
 
           {/* Modal for Create Room */}
-          <Modal show={showModal} onHide={handleModalClose}>
+          <Modal show={showModal} onHide={() => setShowModal(false)}>
             <Modal.Header closeButton>
               <Modal.Title>Create Room</Modal.Title>
             </Modal.Header>
             <Modal.Body>
-              <p>Set up your game dimensions and size:</p>
-              <div className="d-flex justify-content-between">
+              <p>Set up your game dimensions, size, and color:</p>
+
+              {/* Dimensions and Size */}
+              <div className="d-flex justify-content-between mb-3">
                 <div>
                   <label>Dimensions</label>
                   <div className="d-flex">
@@ -617,7 +757,7 @@ function OnlinePage() {
                     </Button>
                     <Form.Control
                       type="number"
-                      value={settings.dims}
+                      value={settings.boardSize.dims}
                       readOnly
                       className="mx-2"
                     />
@@ -644,7 +784,7 @@ function OnlinePage() {
                     </Button>
                     <Form.Control
                       type="number"
-                      value={settings.size}
+                      value={settings.boardSize.size}
                       readOnly
                       className="mx-2"
                     />
@@ -659,9 +799,25 @@ function OnlinePage() {
                   </div>
                 </div>
               </div>
+
+              {/* Color Selection */}
+              <div>
+                <label>Select Color</label>
+                <ButtonGroup className="d-flex">
+                  {["Black", "Random", "White"].map((color) => (
+                    <Button
+                      key={color}
+                      variant={settings.color === color ? "primary" : "outline-primary"}
+                      onClick={() => handleColorChange(color)}
+                    >
+                      {color}
+                    </Button>
+                  ))}
+                </ButtonGroup>
+              </div>
             </Modal.Body>
             <Modal.Footer>
-              <Button variant="secondary" onClick={handleModalClose}>
+              <Button variant="secondary" onClick={() => setShowModal(false)}>
                 Cancel
               </Button>
               <Button variant="primary" onClick={handleCreateClick}>
@@ -675,4 +831,8 @@ function OnlinePage() {
   );
 }
 
+
+
+
 export default App;
+
