@@ -443,7 +443,7 @@ function GamePage() {
   const isMP = mpSettings !== undefined;
   const is2P = isAI || isMP;
 
-  const player = isAI ? aiSettings.player : isMP ? (Number(mpSettings.users[mpSettings.startPlayer]===username)) : undefined;
+  const player = isAI ? aiSettings.player : isMP ? (Number(mpSettings.users[mpSettings.startPlayer]!==username)) : undefined;
 
   // Initialize the game
   const gameRef = useRef(new Game(boardSize.dims, boardSize.size));
@@ -453,6 +453,9 @@ function GamePage() {
   const handleTurnChange = () => {
     setTurn((prevTurn) => !prevTurn);
   }
+
+  console.log(mpSettings)
+  console.log(username)
 
   const handleCellClick = (coords) => {
     var success=gameRef.current.makeMove(coords);
@@ -464,17 +467,26 @@ function GamePage() {
     }
   };
 
-  if(isMP){
-    socket.on("move", function (msg) {
-      if(msg==="pass"){
-        gameRef.current.pass()
-      }
-      else{
-        gameRef.current.makeMove(msg);
-      }
-      handleTurnChange();
-    });
-  }
+  useEffect(() => {
+    if (isMP) {
+      const handleMove = (msg) => {
+        if (msg === "pass") {
+          gameRef.current.pass();
+        } else {
+          gameRef.current.makeMove(msg);
+        }
+        handleTurnChange();
+      };
+
+      socket.on("move", handleMove);
+
+      // Cleanup listener on component unmount
+      return () => {
+        socket.off("move", handleMove);
+      };
+    }
+  }, []); // Run once when the component mounts
+
 
   // List of numbers to be displayed up to boardSize.dims
   const numbers = Array.from({ length: boardSize.dims }, (_, index) => index + 1);
@@ -626,7 +638,7 @@ function GamePage() {
 function OnlinePage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const username = useMemo(() => location.state?.username || "Guest", [location.state]);
+  const [username, setUsername] = useState(location.state?.username || "Guest");
 
   const [showModal, setShowModal] = useState(false);
   const [settings, setSettings] = useState({
@@ -636,25 +648,34 @@ function OnlinePage() {
 
   const [gamesList, setGamesList] = useState({});
 
-  console.log(gamesList)
-
   useEffect(() => {
-    console.log("here")
-    console.log(username)
     socket.emit("login", username);
+  }, []);
+
+  useEffect(() => {  
+    const handleUpdate = (msg) => {
+      if (msg.username !== username) setUsername(msg.username);
+      setGamesList(msg.games);
+    };
+  
+    const handleMatched = (msg) => {
+      navigate('/online/game', {
+        state: {
+          boardSize: msg.boardSize,
+          mpSettings: msg.mpSettings,
+          username: username,
+        },
+      });
+    };
+  
+    socket.on("update", handleUpdate);
+    socket.on("matched", handleMatched);
+  
+    return () => {
+      socket.off("update", handleUpdate);
+      socket.off("matched", handleMatched);
+    };
   }, [username, navigate]);
-
-  socket.on("update", function (msg) {
-    console.log("here")
-    console.log(msg.games)
-    setGamesList(msg.games);
-  });
-
-  socket.on("matched", function (msg) {
-    console.log("matched")
-    console.log(msg)
-    navigate('/online/game', { state: {boardSize: msg.boardSize, mpSettings:msg.mpSettings, username:username} });
-  });
 
   const updateSetting = (key, updater) => {
     setSettings((prev) => ({

@@ -12,12 +12,24 @@ let openGames = {};
 let activeGames = {};
 var gameNum = 0;
 
-app.use(express.static('build'));  // Serve the React build folder
+app.use(express.static('build')); 
 
 io.on('connection', function (socket) {
     console.log('new connection ' + socket.id);
 
+    function update(socket){
+        socket.emit('update', {
+            users: Object.keys(lobbyUsers),
+            games: openGames,
+            username: socket.username
+        });
+    }
+
     socket.on('login', function (username) {
+        if (Object.values(users).some(user => user.userId === socket)) {
+            console.log("Socket already logged in.");
+            return;
+        }
         while (users[username]){
             username = username + Math.floor(Math.random() * 10).toString();
         }
@@ -27,10 +39,7 @@ io.on('connection', function (socket) {
         
         socket.username = username;
 
-        socket.emit('update', {
-            users: Object.keys(lobbyUsers),
-            games: openGames
-        });
+        update(socket);
 
         lobbyUsers[username] = socket;
     });
@@ -51,10 +60,7 @@ io.on('connection', function (socket) {
 
         // Update all other users
         Object.keys(lobbyUsers).forEach((username) => {
-            lobbyUsers[username].emit('update', {
-                users: Object.keys(lobbyUsers),
-                games: openGames
-            });
+            update(lobbyUsers[username])
         });
     });
 
@@ -96,10 +102,7 @@ io.on('connection', function (socket) {
         // Update all other users
         Object.keys(lobbyUsers).forEach((username) => {
             if (username !== game.users[0] && username !== game.users[1]) {
-                lobbyUsers[username].emit('update', {
-                    users: Object.keys(lobbyUsers),
-                    games: openGames
-                });
+                update(lobbyUsers[username])
             }
         });
     });
