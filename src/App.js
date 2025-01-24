@@ -454,9 +454,6 @@ function GamePage() {
     setTurn((prevTurn) => !prevTurn);
   }
 
-  console.log(mpSettings)
-  console.log(username)
-
   const handleCellClick = (coords) => {
     var success=gameRef.current.makeMove(coords);
     if(success){
@@ -495,12 +492,16 @@ function GamePage() {
   );
   
   const handleNumberClick = (num) => {
-    setActiveInputs((prevInputs) => {
-      const newInputs = [...prevInputs];
-      // Toggle input field for the clicked number
-      newInputs[num] = newInputs[num] === undefined ? '' : undefined;
-      return newInputs;
-    });
+      setActiveInputs((prevInputs) => {
+        const newInputs = [...prevInputs];
+        if(newInputs[num] === undefined && activeInputs.reduce((acc, cur) => acc + (cur === undefined), 0) > 2){
+          newInputs[num] = 0;
+        }
+        else{
+          newInputs[num] = undefined;
+        }
+        return newInputs;
+      });
   };
   
   // Handle input change
