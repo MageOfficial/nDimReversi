@@ -1,12 +1,12 @@
-## n-Dimensional Reversi
-# About the Game
+# n-Dimensional Reversi
+## About the Game
 
 Reversi is a game where two players attempt to end with the highest number of pieces of their color. A piece is placed so that it forms a line with another friendly piece and all enemy pieces in between are flipped.\
 This project extends this to any amount of dimensions (Though practically it is harder to go larger than 8). Boards are shown in 2D slices and you can limit what slices you see at once.
 
 This code is hosted at this [website](https://ndimreversi.onrender.com/)
 
-# About the Code
+## About the Code
 
 The project uses Node.js, React.js, and Bootstrap. A server creates a socket.io connection between players to allow for online play.
 
